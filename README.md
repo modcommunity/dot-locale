@@ -9,9 +9,22 @@ This asset, along with all the others, was built initially with **Claude Code** 
 
 **Please treat this as partially tested.** Every asset has its own headless test suite and those suites pass, but very little of this has been in front of real players yet. Expect rough edges, and please report anything you run into.
 
-## The website's layout, read as it is
+I intend on reviewing code, testing, and editing documentation regularly. If you're interested in helping out, please let me know!
 
-One folder per language, one JSON file per area, nested objects inside:
+## What it does
+It translates a game's text into the player's language. It reads the same files the TMC website uses, in the same message format and with the same keys. So when the website refuses something (a party that is full, say), the game can show the website's own message in any of the nine languages it already has, with nothing to keep in sync.
+
+Messages use the ICU format, so one message can handle names, numbers, choices and plurals. Plurals follow each language's real rules: Russian has several forms chosen by the last digits, French puts 0 with 1, and Japanese has only one form. Numbers are grouped the way each reader expects: `12,500` in English, `12.500` in German, `12 500` in French.
+
+A label is never blank. If the player's language has no translation, it falls back to the language without its region (`de-AT` to `de`), then to the default language, and finally shows **the key itself**, so a missing line is easy to spot and search for.
+
+## Getting started
+You need [Godot 4.7](https://godotengine.org/download). The easiest way to get this addon and the ones it needs is [dot-bootstrap](https://github.com/modcommunity/dot-bootstrap), which clones every project and links the addons into each one.
+
+To add it to your own project by hand, copy `addons/dot_locale/` and [dot-core](https://github.com/modcommunity/dot-core)'s `addons/dot_core/` into it and enable dot-locale in **Project → Project Settings → Plugins**. dot-core is the only dependency.
+
+## The files
+One folder per language, one JSON file per area, with nested objects inside. This is the website's own layout:
 
 ```
 locales/
@@ -19,41 +32,64 @@ locales/
   de/party.json    { "join": { "deny": { "full": "Diese Party ist voll." } } }
 ```
 
-A message's key is the file name plus its path: `party.join.deny.full`. That is exactly the key the website's API refuses with, so there is no mapping table between what the website says and what the game shows.
+A message's key is the file name plus its path: `party.join.deny.full`. That is the same key the website's API sends back when it refuses something.
+
+## Using it
 
 ```gdscript
-var loc: DotLocale = DotLocaleConfig.new().make().value   # reads res://locales
+var config := DotLocaleConfig.new()
+config.load_layered()                        # so --locale-language and --locale-pseudo apply
+var loc: DotLocale = config.make().value     # reads res://locales
+
+label.text = loc.t("party.join.deny.full")
 label.text = loc.t("party.ready.count", {"count": 3})
-status.text = loc.explain(result.error)                    # a website refusal, in the player's language
+status.text = loc.explain(result.error)      # a website refusal, in the player's language
+
+loc.set_locale("de")                         # when the player picks a language
 ```
 
-## Messages are ICU, like the website's
+Messages look like this:
 
-`{user} joined.`, `{n, number}`, `{kind, select, host {…} other {…}}` and plurals — `{count, plural, one {# round} few {# раунда} many {# раундов} other {# rounds}}` — nested to any depth. Plurals use the real rules for each language: Russian picks between four forms by the last one and two digits, French puts zero with one, and Japanese has one form. The English rule "1 is singular, everything else plural" is wrong in most of the languages the website already ships.
+```
+{user} joined.
+{n, number} points
+{kind, select, host {You are the host.} other {Waiting for the host.}}
+{count, plural, one {# player ready} other {# players ready}}
+```
 
-Numbers are grouped the way the reader expects: `12,500` in English, `12.500` in German, `12 500` in French.
+`explain(error)` shows the translation for the key in the error's detail, and falls back to the error's own message if there is none. `to_translation("de")` turns the messages with no placeholders into an engine `Translation`, so a `Control` with auto-translate shows them too.
 
-## Nothing is ever blank
+## Finding missing translations
 
-The player's language falls back to the language without its region, then to the default language, and finally to **the key itself**. A missing translation is normal for a game that updates faster than its translators work. A blank label is a bug nobody reports; a key on screen is ugly, searchable, and tells the developer exactly which line to add. `missing_keys()` lists every key asked for that no language had.
+```bash
+godot --path my-game -- --locale-pseudo true    # every message accented, bracketed and a third longer
+godot --path my-game -- --locale-language de    # run the game in German
+```
 
-## Finding problems before paying for a translation
+Pseudo-localisation shows `Sam joined.` as `[Sam ĵóíñéð. ~·~]`. Any text still in plain English never went through the catalogue and will be English in every language. A missing closing bracket means a label that fits English will cut off a longer language.
 
-**Pseudo-localisation** (`--locale-pseudo true`) shows every message accented, bracketed and about a third longer: `[Ŝáɱ ĵóíñéð. ~·~·]`.
+- `loc.missing_keys()` lists every key the game asked for that no language had.
+- `loc.catalogue.missing_in("de")` lists the keys German lacks compared with English.
+- `loc.catalogue.argument_mismatches("de")` lists German messages whose placeholders differ from the English ones, which would otherwise show `{player}` on screen.
 
-- A string still in plain English on that screen never went through the catalogue. It is hard-coded, and will be English in every language.
-- A missing closing bracket is a label that fits English and cuts German off.
+## Settings
+`DotLocaleConfig` is layered like every Dot config: inspector defaults, then a JSON file, then the environment, then the command line. Call `load_layered()` before `make()`.
 
-`missing_in("de")` lists the keys a language lacks. `argument_mismatches("de")` finds translations that use a different placeholder from the English, which would otherwise show `{player}` to every German player.
+| Setting | Default | What it does |
+| --- | --- | --- |
+| `language` | empty | The player's language (`de`, `pt-BR`). Empty uses the operating system's |
+| `default_language` | `en` | The last language tried, and the one every key must exist in |
+| `directory` | `res://locales` | The folder with one sub-folder per language |
+| `pseudo` | false | Show every message pseudo-localised |
 
-## Installing
+From the environment they are `DOT_LOCALE_LANGUAGE` and so on, and on the command line `--locale-language`.
 
-Copy `addons/dot_locale/` and [`dot-core`](https://github.com/modcommunity/dot-core)'s `addons/dot_core/` into your project and enable it in **Project → Project Settings → Plugins**.
+## Testing
 
-## Dependencies
+```bash
+godot --headless --path . --import
+godot --headless --path . res://examples/locale_selftest.tscn
+```
 
-[dot-core](https://github.com/modcommunity/dot-core). Nothing else.
-
-## Licence
-
+## License
 MIT. See [LICENSE](LICENSE).
