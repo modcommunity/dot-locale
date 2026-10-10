@@ -1,77 +1,45 @@
 # dot-locale
 
-Localisation that reads website-city's own locale files: ICU MessageFormat, CLDR plural rules, a fallback chain that ends in the key, and pseudo-localisation.
+Localisation that reads website-city's own locale files: ICU MessageFormat, CLDR plural rules, a fallback chain that ends in the key, and pseudo-localisation. It turns the reason keys the site and dot-party return into sentences in the player's language.
 
-**The distributable is `addons/dot_locale/`.** It requires [dot-core](../dot-core), a separate repository, and nothing else.
+Read the family [CLAUDE.md](../../CLAUDE.md) first.
 
-```bash
-ln -s ../../dot-core/addons/dot_core addons/dot_core
-```
+**The distributable is `addons/dot_locale/`.** It requires [dot-core](../dot-core) and nothing else (`ln -s ../../dot-core/addons/dot_core addons/dot_core`, gitignored).
 
-## Why this exists
+## Read before
 
-**Nothing in the family localised anything.** No addon or game called `TranslationServer`, every string on every screen was an English literal, and dot-ui is proud of shipping no art assets while shipping only English. Meanwhile website-city is translated into nine languages (`locales/{de,en,es,fr,ja,nl,pt,ru,zh}/*.json`, about fifty namespaces, rendered by next-intl) and refuses API requests with **keys** — `party.join.deny.full` — rather than prose. dot-party carries those keys in `DotError.detail`. This addon is what turns one into a sentence in the player's language without a second table.
-
-## The pieces
-
-| | |
+| Read | Before |
 | --- | --- |
-| `DotLocalePlural` | CLDR cardinal rules for the site's languages and their neighbours, with CLDR's own operands (`i`, `v`). Unknown language → `other`, which every ICU plural must have. |
-| `DotLocaleFormat` | The ICU subset the site uses: argument, `number`, `plural` (with `=N` and `#`), `select`, quoting. Compiled to a tree once. A pattern that does not parse is **shown raw**. |
-| `DotLocaleCatalogue` | locale → key → pattern. `load_dir` reads the site's layout; one bad file refuses itself only. `missing_in`, `argument_mismatches`. |
-| `DotLocale` | The translator: chain, `t`, `explain`, `missing_keys`, `to_translation`. |
-| `DotLocalePseudo` | Accent, bracket, expand by 35%, leave the ICU structure alone. |
-| `DotLocaleConfig` | `language`, `default_language`, `directory`, `pseudo` — layered, so `--locale-language de` and `--locale-pseudo true` work without a settings screen. |
+| [docs/design.md](docs/design.md) | changing anything: why it exists, the chain, plural language, raw patterns, JSON loading, engine `Translation`, pseudo, what is deliberately not here |
+| [docs/history.md](docs/history.md) | the three things building it found |
 
-## Decisions
+## Layout
 
-### The chain ends in the key
+| Path | What |
+| --- | --- |
+| `core/dot_locale_plural.gd` | `DotLocalePlural`: CLDR cardinal rules with CLDR's operands; unknown language → `other` |
+| `core/dot_locale_format.gd` | `DotLocaleFormat`: the ICU subset, compiled to a tree once |
+| `core/dot_locale_catalogue.gd` | `DotLocaleCatalogue`: locale → key → pattern; `load_dir`, `add(locale, ns, tree)`, `missing_in`, `argument_mismatches` |
+| `core/dot_locale_pseudo.gd` | `DotLocalePseudo`: accent, bracket, expand, keep the ICU structure |
+| `runtime/dot_locale.gd` | `DotLocale`: the translator; `t`, `explain(DotError)`, `chain`, `missing_keys`, `to_translation`, `register` |
+| `dot_locale_config.gd` | `DotLocaleConfig`: `language`, `default_language`, `directory`, `pseudo`, layered (`--locale-language de`, `--locale-pseudo true`) |
+| `examples/locale_selftest.tscn` | the suite; writes nothing outside `user://` |
 
-`pt-BR → pt → en → "party.join.deny.full"`. An empty label is a bug nobody reports; a key is searchable and a screenshot of it names the line to add.
+Paths except `examples/` are in `addons/dot_locale/`.
 
-### Plural rules follow the pattern's language, not the player's
+## Running and testing
 
-A message found in the English fallback for a Russian player is an English sentence, so it is pluralised by English rules. Russian rules would choose `few` and find no such branch.
+The family's two steps ([game-dev/CLAUDE.md](../../CLAUDE.md#validating-anything)), then `timeout 60 godot --headless --path . res://examples/locale_selftest.tscn`. Stderr should be empty.
 
-### A catalogue load does not print engine errors
+## Rules that bite
 
-`JSON.parse_string` prints an engine `ERROR` for a translator's trailing comma and then tells the caller nothing. A `JSON` instance is used instead: stderr stays clean, and the file, line and message go into the result.
+- The fallback chain ends in the key, never an empty string. [design](docs/design.md#the-chain-ends-in-the-key)
+- Pluralise by the language the pattern was found in, not the player's; keep the suite's non-English plural section. [design](docs/design.md#plural-rules-follow-the-patterns-language-not-the-players)
+- A pattern that does not parse is shown raw. [design](docs/design.md#a-pattern-that-does-not-parse-is-shown-raw)
+- Load JSON with a `JSON` instance, never `JSON.parse_string`; one bad file refuses only itself. [design](docs/design.md#a-catalogue-load-does-not-print-engine-errors)
+- Only argument-free messages go into an engine `Translation`. [design](docs/design.md#only-argument-free-messages-become-an-engine-translation)
+- One `DotLocale` per language in use, found through `DotRegistry`; no autoload, no Node. [design](docs/design.md#not-an-autoload-and-not-a-node)
+- `namespace` is reserved in GDScript; the parameter is `ns`. [history](docs/history.md#namespace-is-a-reserved-word)
+- The site's locale files are never copied into this repository. [design](docs/design.md#the-sites-locale-files-are-not-copied-into-this-repository)
 
-### Only argument-free messages become an engine `Translation`
-
-`tr()` knows nothing of ICU. `to_translation()` exists so a `Control` with auto-translate shows static text from the same catalogue; a plural handed to the engine would show its braces.
-
-### Not an autoload, and not a Node
-
-A server rendering messages for players in four languages needs four translators. `register()` puts one in `DotRegistry` for code that wants to find it without naming it.
-
-### The site's locale files are not copied into this repository
-
-They are the site's content, in a private repository, and change on the site's schedule. A game ships the ones it uses, or fetches them — dot-cloud can deliver a locale pack like any other content.
-
-## What building it found
-
-**`namespace` is a reserved word in GDScript 4.** `func add(locale, namespace, tree)` failed to parse, every file that referenced the catalogue failed with it, and the suite scene **hung** rather than failing — the hazard `docs/gdscript-hazards.md` describes, reached again. The parameter is `ns`.
-
-**`JSON.parse_string` prints its own `ERROR` line** for the deliberately broken file in section 3, so a green run had an error on stderr. See Decisions.
-
-**The first pseudo-localiser left every plural and select body alone.** It treated everything after a `{` as a header, branch bodies included, so `other {# rounds}` came out unaccented — and a message that looks untouched on a pseudo build reads as hard-coded, which is the one thing pseudo-localisation exists to tell you. That one was caught on review before the suite first ran, not by running it, so it is not the kind of finding this family counts. Each `{` now flips between header and body and each `}` restores what its `{` interrupted, and section 6 checks that a transformed plural still compiles and still formats.
-
-## Things deliberately not here
-
-- **Right-to-left layout.** The site ships no RTL language. A game that adds one needs `Control.layout_direction`, which is the engine's.
-- **Date and time formatting.** `{d, date}` is accepted and rendered as the raw value. Nobody here formats one yet, and a half-right date format is worse than an honest number.
-- **Ordinals** (`selectordinal`) are parsed as plurals, which is wrong for English "1st, 2nd". Nothing uses them yet.
-- **Font fallback for CJK.** A game showing Japanese needs a font with the glyphs; that is a theme decision, not a string one.
-
-## Validating
-
-```bash
-godot --headless --path . --import
-find . -name '*.gd' -not -path './.godot/*' | while read f; do
-    godot --headless --path . --check-only --script "res://${f#./}"
-done
-timeout 60 godot --headless --path . res://examples/locale_selftest.tscn
-```
-
-7 sections, 59 checks, no files outside `user://`. **Section 1 is the one to keep**: every English check passes against a plural rule that is wrong in Russian, Polish, French and Portuguese.
+Not yet supported: right-to-left layout, date and time formatting, ordinals, CJK font fallback. [design](docs/design.md#things-deliberately-not-here)
