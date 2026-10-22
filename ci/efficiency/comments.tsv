@@ -1,0 +1,12 @@
+# comments
+# Baselines only shrink: scripts/<gate> --update lowers or drops entries and refuses to add.
+addons/dot_locale/core/dot_locale_catalogue.gd::long_block	2
+addons/dot_locale/core/dot_locale_format.gd::banner	1
+addons/dot_locale/core/dot_locale_format.gd::long_block	2
+addons/dot_locale/core/dot_locale_plural.gd::long_block	1
+addons/dot_locale/core/dot_locale_pseudo.gd::long_block	2
+addons/dot_locale/dot_locale_config.gd::long_block	1
+addons/dot_locale/dot_locale_plugin.gd::long_block	1
+addons/dot_locale/runtime/dot_locale.gd::long_block	2
+examples/locale_selftest.gd::banner	8
+examples/locale_selftest.gd::long_block	1
