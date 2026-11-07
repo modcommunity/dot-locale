@@ -29,7 +29,7 @@ Paths except `examples/` are in `addons/dot_locale/`.
 
 ## Running and testing
 
-The family's two steps ([game-dev/CLAUDE.md](../../CLAUDE.md#validating-anything)), then `timeout 60 godot --headless --path . res://examples/locale_selftest.tscn`. Stderr should be empty.
+The family's two steps ([family CLAUDE.md](../../CLAUDE.md#validating-anything)), then `timeout 60 godot --headless --path . res://examples/locale_selftest.tscn`. Stderr should be empty.
 
 ## Rules that bite
 
