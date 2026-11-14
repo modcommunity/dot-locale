@@ -1,5 +1,3 @@
-# dot-locale
-
 Translates a game's text into the player's language. It reads the same files, message format and keys as the TMC website, so when the website refuses something (a full party, say), the game can show the website's own message in any language the website has, with nothing to keep in sync.
 
 Part of TMC's **Dot** collection: modular, MIT-licensed building blocks for games on the TMC platform (only the TMC website back end is closed). It was built with Claude Code and its headless suite passes, but little of it has met real players yet, so expect rough edges and please report what you find.
